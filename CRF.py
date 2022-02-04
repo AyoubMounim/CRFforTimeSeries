@@ -59,6 +59,7 @@ def gridSearch(data, n_test, n_estimators_range, step, n_in_range, n_out = 1):
         for n_in in range(n_in_range[0], n_in_range[1]+1):
             hist = seriesToSupervised(data = data['Close Price'], n_in = n_in, n_out = n_out)
             hist = np.concatenate((np.reshape(np.asarray(data[f'{ma_periods}-bar Moving Average'])[n_in-1:-1], (len(data.index)-n_in, 1)), hist), axis = 1)
+            hist = np.concatenate((np.reshape(np.asarray(data[f'{rsi_period}-bar RSI'])[n_in-1:-1], (len(data.index)-n_in, 1)), hist), axis = 1)
             if n_in < ma_periods:
                 hist = hist[ma_periods-n_in:]
             error, alpha = forwardValidation(data = hist, n_test = n_test, n_out = n_out, n_estimators = n_estimator)
@@ -104,6 +105,32 @@ def movingAverage(data, n_periods, exponential = False):
         ma.append(ma_value)
     return ma
 
+def RSI(data, n_periods):
+    data = np.asarray(data)
+    rsi_list = [np.NaN]*(n_periods - 1)
+    for i in range(n_periods-1, len(data)):
+        gain, loss = [], []
+        for j in range(n_periods-1):
+            diff = data[i-j] - data[i-j-1]
+            if diff >= 0:
+                gain.append(diff)
+            else:
+                loss.append(diff)
+        try:
+            mean_loss = abs(mean(loss))
+        except:
+            mean_loss = 0
+        try:
+            mean_gain = mean(gain)
+        except:
+            mean_gain = 0
+        if mean_loss == 0:
+            rsi_list.append(100)
+        else:
+            rs = mean_gain/mean_loss
+            rsi_list.append(100*rs/(1+rs))
+    return rsi_list
+
 def rateOfError(data, pred, alpha):
     data = np.asanyarray(data)
     pred = np.asanyarray(pred)
@@ -119,6 +146,7 @@ def rateOfError(data, pred, alpha):
     
 n_out = 1
 ma_periods = 5
+rsi_period = ma_periods
 
 symbol = 'AAPL'
 start = '2022-02-01'
@@ -131,8 +159,9 @@ for i in history.index:
     history.loc[i, 'Time'] = str(history.loc[i, 'Time'])
 history.set_index('Time', inplace=True)
 history[f'{ma_periods}-bar Moving Average'] = movingAverage(data = history['Close Price'], n_periods = ma_periods, exponential=True)
+history[f'{rsi_period}-bar RSI'] = RSI(data = history['Close Price'], n_periods = rsi_period)
 fig, ax = plt.subplots(figsize = (18, 8))
-sns.lineplot(data = history, palette = ['darkblue', 'darkorange'])
+sns.lineplot(data = [history['Close Price'], history[f'{ma_periods}-bar Moving Average']], palette = ['darkblue', 'darkorange'])
 plt.title(f'{symbol} One Day Time Series for {start} (5 minutes intervals)')
 plt.xlabel('Time')
 plt.ylabel('Price ($)')
@@ -164,8 +193,9 @@ for i in history.index:
     history.loc[i, 'Time'] = str(history.loc[i, 'Time'])
 history.set_index('Time', inplace=True)
 history[f'{ma_periods}-bar Moving Average'] = movingAverage(data = history['Close Price'], n_periods = ma_periods, exponential = True)
+history[f'{rsi_period}-bar RSI'] = RSI(data = history['Close Price'], n_periods = rsi_period)
 fig, ax = plt.subplots(figsize = (18, 8))
-sns.lineplot(data = history, palette = ['darkblue', 'darkorange'])
+sns.lineplot(data = [history['Close Price'], history[f'{ma_periods}-bar Moving Average']], palette = ['darkblue', 'darkorange'])
 plt.title(f'{symbol} One Day Time Series for {start} (5 minutes intervals)')
 plt.xlabel('Time')
 plt.ylabel('Price ($)')
@@ -179,16 +209,18 @@ start = max(ma_periods, n_in)
 for i in range(start, len(history.index)-1):
     data = seriesToSupervised(history['Close Price'][start-n_in:i+1], n_in = n_in, n_out = n_out)
     ma_element = np.reshape(np.asarray(history[f'{ma_periods}-bar Moving Average'])[max(ma_periods, n_in)-1:i], (len(data), 1))
+    rsi_element = np.reshape(np.asarray(history[f'{rsi_period}-bar RSI'])[max(ma_periods, n_in)-1:i], (len(data), 1))
     data = np.concatenate((ma_element, data), axis = 1)
+    data = np.concatenate((rsi_element, data), axis = 1)
     trainX, trainY = data[:, :-n_out], data[:, -n_out:]
     best_model.fit(trainX, np.ravel(trainY))
-    prediction_vector = [history.iloc[i, 1]]
+    prediction_vector = [history.iloc[i, 2], history.iloc[i, 1]]
     for j in range(n_in - 1, -1, -1):
         prediction_vector.append(history.iloc[i-j,0])
     yhat = best_model.predict([prediction_vector])
-    history.iloc[i+1, 2] = yhat[0]
-    history.iloc[i+1, 3] = yhat[0] + alpha
-    history.iloc[i+1, 4] = yhat[0] - alpha
+    history.iloc[i+1, 3] = yhat[0]
+    history.iloc[i+1, 4] = yhat[0] + alpha
+    history.iloc[i+1, 5] = yhat[0] - alpha
     
 fig, ax = plt.subplots(figsize = (18, 8))
 ax = sns.lineplot(data = [history['Close Price'], history['Prediction']], palette = ['darkblue', 'firebrick'])
@@ -200,7 +232,7 @@ x = l_minus.get_xdata()
 y_plus = l_plus.get_ydata()
 y_minus = l_minus.get_ydata()
 ax.fill_between(x, y_minus, y_plus, color = "turquoise", alpha=0.2)
-plt.title(f'{symbol} One Day Time Series (5 minutes intervals)')
+plt.title(f'{symbol} One Day Time Series for {symbol} (5 minutes intervals)')
 plt.xlabel('Time')
 plt.ylabel('Price ($)')
 plt.xticks(rotation=90)
