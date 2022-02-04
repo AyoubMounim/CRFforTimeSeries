@@ -149,9 +149,9 @@ ma_periods = 5
 rsi_period = ma_periods
 
 symbol = 'AAPL'
-start = '2022-02-01'
-end = '2022-02-02'
-history = yf.Ticker(symbol).history(start= start, end= end, interval='5m')
+start_date = '2022-02-01'
+end_date = '2022-02-02'
+history = yf.Ticker(symbol).history(start = start_date, end = end_date, interval='5m')
 history = history[['Close']]
 history.rename(columns = {'Close': 'Close Price'}, inplace = True)
 history['Time'] = pd.to_datetime(history.index).time
@@ -162,7 +162,7 @@ history[f'{ma_periods}-bar Moving Average'] = movingAverage(data = history['Clos
 history[f'{rsi_period}-bar RSI'] = RSI(data = history['Close Price'], n_periods = rsi_period)
 fig, ax = plt.subplots(figsize = (18, 8))
 sns.lineplot(data = [history['Close Price'], history[f'{ma_periods}-bar Moving Average']], palette = ['darkblue', 'darkorange'])
-plt.title(f'{symbol} One Day Time Series for {start} (5 minutes intervals)')
+plt.title(f'{symbol} One Day Time Series for {start_date} (5 minutes intervals)')
 plt.xlabel('Time')
 plt.ylabel('Price ($)')
 plt.xticks(rotation=90)
@@ -183,9 +183,9 @@ if n_in < ma_periods:
 trainX, trainY = train[:,:-n_out], train[:,-n_out:]
 best_model.fit(trainX, np.ravel(trainY))
 
-start= '2022-02-02'
-end= '2022-02-03'
-history = yf.Ticker(symbol).history(start= start, end= end, interval='5m')
+start_date = '2022-02-02'
+end_date = '2022-02-03'
+history = yf.Ticker(symbol).history(start = start_date, end = end_date, interval='5m')
 history = history[['Close']]
 history.rename(columns = {'Close': 'Close Price'}, inplace = True)
 history['Time'] = pd.to_datetime(history.index).time
@@ -196,7 +196,7 @@ history[f'{ma_periods}-bar Moving Average'] = movingAverage(data = history['Clos
 history[f'{rsi_period}-bar RSI'] = RSI(data = history['Close Price'], n_periods = rsi_period)
 fig, ax = plt.subplots(figsize = (18, 8))
 sns.lineplot(data = [history['Close Price'], history[f'{ma_periods}-bar Moving Average']], palette = ['darkblue', 'darkorange'])
-plt.title(f'{symbol} One Day Time Series for {start} (5 minutes intervals)')
+plt.title(f'{symbol} One Day Time Series for {start_date} (5 minutes intervals)')
 plt.xlabel('Time')
 plt.ylabel('Price ($)')
 plt.xticks(rotation=90)
@@ -232,7 +232,7 @@ x = l_minus.get_xdata()
 y_plus = l_plus.get_ydata()
 y_minus = l_minus.get_ydata()
 ax.fill_between(x, y_minus, y_plus, color = "turquoise", alpha=0.2)
-plt.title(f'{symbol} One Day Time Series for {symbol} (5 minutes intervals)')
+plt.title(f'{symbol} One Day Time Series for {start_date} (5 minutes intervals)')
 plt.xlabel('Time')
 plt.ylabel('Price ($)')
 plt.xticks(rotation=90)
