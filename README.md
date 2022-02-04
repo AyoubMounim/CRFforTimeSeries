@@ -25,11 +25,11 @@ def seriesToSupervised(data, n_in = 1, n_out = 1, dropNaN = True):
     agg.reset_index(drop = True, inplace = True)
     return agg.values
 ```
-This data set is the used to train the random forest (RF) regressor. The data-set used for train and validation is obdatained from the data series visualized in the plot above. the last 20% of the time series is used as a test set, as well as a calibration set used to compute the confonformal interval. The non-conformicity funtion used in the calculation of the conformal interval is the absolute error, and the confidence level is 10%. The `gridSearch()` function (see [code](/CRF.py)) is used to test different hyperparameters choices, namely the number of estimators of the RF and the number of previous observations to use to make a prediction. The out put of the function is a tuple containing the bast parameters to use according to a preferred metric, which in my case is the mean squared error. The model is then trained using the best hyperparameters on the whole data-set, and the time series of the following day is used as a working example
+This data set is the used to train the random forest (RF) regressor. The data-set used for train and validation is obdatained from the data series visualized in the plot above. the last 30% of the time series is used as a test set, as well as a calibration set used to compute the confonformal interval. The non-conformicity funtion used in the calculation of the conformal interval is the absolute error, and the confidence level is 10%. The `gridSearch()` function (see [code](/CRF.py)) is used to test different hyperparameters choices, namely the number of estimators of the RF and the number of previous observations to use to make a prediction. The out put of the function is a tuple containing the bast parameters to use according to a preferred metric, which in my case is the mean squared error. The model is then trained using the best hyperparameters on the whole data-set, and the time series of the following day is used as a working example
 
 ![pred](/Plots/price_pred.png)
 
-in this plot the model is used to predic the time series step by step, and the conformal interval in represented by the shaded region. Computing the error rate, namely the percentage of times in which the actual value is outside the prediction region, gives an error of 7%, which is less that 10% as expected. 
+in this plot the model is used to predic the time series step by step, and the conformal interval in represented by the shaded region. Computing the error rate, namely the percentage of times in which the actual value is outside the prediction region, gives an error of 4%, which is less that 10% as expected. 
 
 ## Future Impovement
 
