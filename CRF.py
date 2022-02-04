@@ -61,7 +61,7 @@ def randomForestForecast(train, testX, n_out = 1, n_estimators = 1000):
 def gridSearch(data, n_test, n_estimators_range, step, n_in_range, n_out = 1):
     best_error = 0
     for n_estimator in range(n_estimators_range[0], n_estimators_range[1]+1, step):
-        print(f'calculating for {n_estimator} estimators')
+        print(f'training forest with {n_estimator} estimators')
         for n_in in range(n_in_range[0], n_in_range[1]+1):
             hist = seriesToSupervised(data = data['Close Price'], n_in = n_in, n_out = n_out)
             hist = np.concatenate((np.reshape(np.asarray(data[f'{ma_periods}-bar Moving Average'])[n_in-1:-1], (len(data.index)-n_in, 1)), hist), axis = 1)
