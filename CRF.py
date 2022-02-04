@@ -13,18 +13,12 @@ sns.set_theme()
 
 def seriesToSupervised(data, n_in = 1, n_out = 1, dropNaN = True):
     df = pd.DataFrame(data)
-    col, names = [], []
+    col = []
     for i in range(n_in, 0, -1):
         col.append(df.shift(i))
-        names.append(f't - {i}')
     for i in range(n_out):
         col.append(df.shift(-i))
-        if i == 0:
-            names.append('t')
-        else:
-            names.append(f't + {i}')
     agg = pd.concat(col, axis = 1)
-    agg.columns = names
     if dropNaN:
         agg.dropna(inplace = True)
     agg.reset_index(drop = True, inplace = True)
