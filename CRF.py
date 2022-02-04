@@ -145,7 +145,9 @@ plt.ylabel('Price ($)')
 plt.xticks(rotation=90)
 plt.show()
 
-best_parameters = gridSearch(data = history, n_test = 10, n_estimators_range = (100, 200), step = 100, n_in_range = (1,10), n_out = n_out)
+n_test = int(len(history.index)*0.3)
+
+best_parameters = gridSearch(data = history, n_test = n_test, n_estimators_range = (100, 1500), step = 100, n_in_range = (1,10), n_out = n_out)
 n_estimators = best_parameters[0]
 n_in = best_parameters[1]
 alpha = best_parameters[3] 
