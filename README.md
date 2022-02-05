@@ -6,7 +6,7 @@ In this project, a regression model based on a random forest algorithm is used t
 
 * [Introduction](#Introduction)
 * [Working Example](#Working-Example)
-* [Future Improvement](#Future-Improvement)
+* [Future Improvements](#Future-Improvements)
 * [References](#References)
 
 ## Introduction
@@ -99,7 +99,7 @@ The prediction at each step, along with the upper und lower end of the conformal
 
 The conformal interval is represented by the shaded region in the plot. Computing the error rate, namely the percentage of times in which the actual value is outside the prediction region, gives an error of 4%, which is less that 10% as expected. 
 
-## Future Improvement
+## Future Improvements
 
 - Writing more efficient code
 - Improving the prediction model by introducing more technical indicators
