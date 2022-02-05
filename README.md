@@ -2,6 +2,12 @@
 
 In this project, a regression model based on random forest algorithm is used to make conformal predictions of the time series consisting of the prices of financial stocks.
 
+## Table of Contents
+
+* [Introduction](#Introduction)
+* [Working Example](#Working-Example)
+* [Future Improvement](#Future-Improvement)
+
 ## Introduction
 
 The aim of this project is to develop a machine learning model that can make predictions about the evolution of financial stocks prices. In particular, the model makes [conformal predictions](https://en.wikipedia.org/wiki/Conformal_prediction), which means that the prediction given by the model is not a single value, but rather it is a continuous interval of values. The with of the conformal interval is controlled by the significance level. For instance, choosing a significance level of 0.1, the output of the model will be such that the actual values fall outside of the conformal interval at most 10% of the times. Once the significance level is defined, the conformal interval is found following the priciple of inductive conforma prediction (ICP). In this project, the nonconformity function is the absolute error, and the nonconformity scores are not normalized, wich means that the conformal interval will be the same for all predictions.
@@ -43,7 +49,9 @@ n_in = best_parameters[1]
 alpha = best_parameters[3] 
 best_model = RandomForestRegressor(n_estimators)
 train = seriesToSupervised(data = history['Close Price'], n_in = n_in, n_out = n_out)
-train = np.concatenate((np.reshape(np.asarray(history[f'{ma_periods}-bar Moving Average'])[n_in-1:-1], (len(history.index)-n_in, 1)), train), axis = 1)
+ma_array = np.reshape(np.asarray(history[f'{ma_periods}-bar Moving Average'])[n_in-1:-1], (len(history.index)-n_in, 1))
+rsi_array = np.reshape(np.asarray(history[f'{rsi_period}-bar RSI'])[n_in-1:-1], (len(history.index)-n_in, 1))
+train = np.concatenate((rsi_array, ma_array, train), axis = 1)
 if n_in < ma_periods:
     train = train[ma_periods-n_in:]
 trainX, trainY = train[:,:-n_out], train[:,-n_out:]
@@ -70,10 +78,9 @@ history['Prediction lower limit'] = np.NaN
 start = max(ma_periods, n_in)
 for i in range(start, len(history.index)-1):
     data = seriesToSupervised(history['Close Price'][start-n_in:i+1], n_in = n_in, n_out = n_out)
-    ma_element = np.reshape(np.asarray(history[f'{ma_periods}-bar Moving Average'])[max(ma_periods, n_in)-1:i], (len(data), 1))
-    rsi_element = np.reshape(np.asarray(history[f'{rsi_period}-bar RSI'])[max(ma_periods, n_in)-1:i], (len(data), 1))
-    data = np.concatenate((ma_element, data), axis = 1)
-    data = np.concatenate((rsi_element, data), axis = 1)
+    ma_array = np.reshape(np.asarray(history[f'{ma_periods}-bar Moving Average'])[max(ma_periods, n_in)-1:i], (len(data), 1))
+    rsi_array = np.reshape(np.asarray(history[f'{rsi_period}-bar RSI'])[max(ma_periods, n_in)-1:i], (len(data), 1))
+    data = np.concatenate((rsi_array, ma_array, data), axis = 1)
     trainX, trainY = data[:, :-n_out], data[:, -n_out:]
     best_model.fit(trainX, np.ravel(trainY))
     prediction_vector = [history.iloc[i, 2], history.iloc[i, 1]]
@@ -85,13 +92,13 @@ for i in range(start, len(history.index)-1):
     history.iloc[i+1, 5] = yhat[0] - alpha
 ```
 
-The prediction at each step, along with the upper und lower end of the conformal interval, are stored in the same original time series data frame so that we can easily confront them
+The prediction at each step, along with the upper und lower end of the conformal interval, are stored in the same original time series data frame, so that we can easily confront them
 
 ![pred](/Plots/price_pred.png)
 
 The conformal interval is represented by the shaded region in the plot. Computing the error rate, namely the percentage of times in which the actual value is outside the prediction region, gives an error of 4%, which is less that 10% as expected. 
 
-## Future Impovement
+## Future Improvement
 
 - Writing more efficient code
 - Improving the prediction model by introducing more technical indicators
