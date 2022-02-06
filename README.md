@@ -32,7 +32,7 @@ history['Time'] = pd.to_datetime(history.index).time
 for i in history.index:
     history.loc[i, 'Time'] = str(history.loc[i, 'Time'])
 history.set_index('Time', inplace=True)
-history[f'{ma_periods}-bar Moving Average'] = movingAverage(data = history['Close Price'], n_periods = ma_periods, exponential=True)
+history[f'{ma_period}-bar Moving Average'] = movingAverage(data = history['Close Price'], n_periods = ma_period, exponential=True)
 history[f'{rsi_period}-bar RSI'] = RSI(data = history['Close Price'], n_periods = rsi_period)
 ```
 
@@ -48,13 +48,14 @@ best_parameters = gridSearch(data = history, n_test = n_test, n_estimators_range
 n_estimators = best_parameters[0]
 n_in = best_parameters[1]
 alpha = best_parameters[3] 
+
 best_model = RandomForestRegressor(n_estimators)
 train = seriesToSupervised(data = history['Close Price'], n_in = n_in, n_out = n_out)
-ma_array = np.reshape(np.asarray(history[f'{ma_periods}-bar Moving Average'])[n_in-1:-1], (len(history.index)-n_in, 1))
-rsi_array = np.reshape(np.asarray(history[f'{rsi_period}-bar RSI'])[n_in-1:-1], (len(history.index)-n_in, 1))
-train = np.concatenate((rsi_array, ma_array, train), axis = 1)
-if n_in < ma_periods:
-    train = train[ma_periods-n_in:]
+for key in lag_indicators.keys():
+    indicator_array = np.reshape(np.asarray(history[f'{lag_indicators[key]}-bar {key}'])[n_in-1:-1], (len(history.index)-n_in, 1))
+    train = np.concatenate((indicator_array, train), axis=1)
+if n_in < max_lag_period:
+    train = train[max_lag_period-n_in:]
 trainX, trainY = train[:,:-n_out], train[:,-n_out:]
 best_model.fit(trainX, np.ravel(trainY))
 ```
@@ -71,26 +72,25 @@ history['Time'] = pd.to_datetime(history.index).time
 for i in history.index:
     history.loc[i, 'Time'] = str(history.loc[i, 'Time'])
 history.set_index('Time', inplace=True)
-history[f'{ma_periods}-bar Moving Average'] = movingAverage(data = history['Close Price'], n_periods = ma_periods, exponential = True)
+history[f'{ma_period}-bar Moving Average'] = movingAverage(data = history['Close Price'], n_periods = ma_period, exponential = True)
 history[f'{rsi_period}-bar RSI'] = RSI(data = history['Close Price'], n_periods = rsi_period)
-history['Prediction'] = np.NaN
 history['Prediction upper limit'] = np.NaN
+history['Prediction'] = np.NaN
 history['Prediction lower limit'] = np.NaN
-start = max(ma_periods, n_in)
+start = max(max_lag_period, n_in)
 for i in range(start, len(history.index)-1):
     data = seriesToSupervised(history['Close Price'][start-n_in:i+1], n_in = n_in, n_out = n_out)
-    ma_array = np.reshape(np.asarray(history[f'{ma_periods}-bar Moving Average'])[max(ma_periods, n_in)-1:i], (len(data), 1))
-    rsi_array = np.reshape(np.asarray(history[f'{rsi_period}-bar RSI'])[max(ma_periods, n_in)-1:i], (len(data), 1))
-    data = np.concatenate((rsi_array, ma_array, data), axis = 1)
+    for key in lag_indicators.keys():
+        indicator_array = np.reshape(np.asarray(history[f'{lag_indicators[key]}-bar {key}'])[start-1:i], (len(data), 1))
+        data = np.concatenate((indicator_array, data), axis=1)
     trainX, trainY = data[:, :-n_out], data[:, -n_out:]
     best_model.fit(trainX, np.ravel(trainY))
-    prediction_vector = [history.iloc[i, 2], history.iloc[i, 1]]
+    prediction_vector = [history.iloc[i, x] for x in range(len(lag_indicators),0,-1)]
     for j in range(n_in - 1, -1, -1):
         prediction_vector.append(history.iloc[i-j,0])
     yhat = best_model.predict([prediction_vector])
-    history.iloc[i+1, 3] = yhat[0]
-    history.iloc[i+1, 4] = yhat[0] + alpha
-    history.iloc[i+1, 5] = yhat[0] - alpha
+    for j in range(-1,2):
+        history.iloc[i+1, len(lag_indicators)+2-j] = yhat[0] + j*alpha
 ```
 
 The prediction at each step, along with the upper und lower end of the conformal interval, are stored in the same original time series data frame, so that we can easily confront them
