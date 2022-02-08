@@ -5,77 +5,144 @@ import pandas as pd
 import numpy as np
 import seaborn as sns
 import matplotlib.pyplot as plt
+from sklearn.preprocessing import StandardScaler
 from sklearn.metrics import mean_squared_error
 from sklearn.ensemble import RandomForestRegressor
 from statistics import mean
 
 sns.set_theme()
 
-def seriesToSupervised(data, n_in = 1, n_out = 1, dropNaN = True):
+def HistoryDataSet(symbol, start_date, end_date, interval='5m', indicators = {}):
+    history = yf.Ticker(symbol).history(start=start_date, end=end_date, interval=interval)
+    history = history[['Close', 'Volume']]
+    history.rename(columns={'Close': 'Close Price'}, inplace=True)
+    '''
+    history['Time'] = pd.to_datetime(history.index).time
+    for i in history.index:
+        history.loc[i, 'Time'] = str(history.loc[i, 'Time'])
+    history.set_index('Time', inplace=True)
+    '''
+    history.reset_index(drop=True, inplace=True)
+    if indicators:
+        for key in indicators.keys():
+            history[f'{indicators[key][0]}-bar {key}'] = indicators[key][1](data=history['Close Price'], n_periods=indicators[key][0])
+    return history
+
+def PlotHistoryDataSet(data, columns = [], palette = []):
+    fig, ax = plt.subplots(figsize=(18, 8))
+    if columns:
+        data_list = []
+        for i in columns:
+            data_list.append(data.iloc[:, i])
+        if palette:
+            if len(columns)==len(palette):
+                sns.lineplot(data=data_list, palette=palette)
+                plt.title(f'One Day Time Series (5 minutes intervals)')
+                plt.xlabel('Time')
+                plt.xticks(rotation=90)
+                plt.show()
+                return
+            else:
+                raise ValueError('lenght of palette must equal lenght of columns to show')
+        else:
+            sns.lineplot(data=data_list)
+            plt.title(f'One Day Time Series (5 minutes intervals)')
+            plt.xlabel('Time')
+            plt.xticks(rotation=90)
+            plt.show()
+            return
+    if palette:
+        if len(data.columns)==len(palette):
+            sns.lineplot(data=data, palette=palette)
+            plt.title(f'One Day Time Series (5 minutes intervals)')
+            plt.xlabel('Time')
+            plt.xticks(rotation=90)
+            plt.show()
+            return
+        else:
+            raise ValueError('lenght of palette must equal lenght of columns to show')
+    sns.lineplot(data=data)
+    plt.title(f'One Day Time Series (5 minutes intervals)')
+    plt.xlabel('Time')
+    plt.xticks(rotation=90)
+    plt.show()
+    return
+
+def SeriesToSupervised(data, n_in = 1, n_out = 1, dropNaN = True):
     df = pd.DataFrame(data)
     col = []
     for i in range(n_in, 0, -1):
         col.append(df.shift(i))
     for i in range(n_out):
-        col.append(df.shift(-i))
+        col.append(df.iloc[:,0].shift(-i))
     agg = pd.concat(col, axis = 1)
     if dropNaN:
-        agg.dropna(inplace = True)
-    agg.reset_index(drop = True, inplace = True)
+        agg.dropna(inplace=True)
+    agg.reset_index(drop=True, inplace=True)
     return agg.values
 
-def trainTestSplit(data, n_test):
-    return data[:-n_test, :], data[-n_test:, :]
-
-def forwardValidation(data, n_test, n_out = 1, n_estimators = 1000, delta = 0.1):
-    predictions = []
-    scores = []
-    train, test = trainTestSplit(data, n_test)
-    hist = [x for x in train]
-    for i in range(len(test)):
-        testX, testY = test[i, :-n_out], test[i, -n_out:]
-        yhat = randomForestForecast(hist, testX, n_out, n_estimators)
-        predictions.append(yhat)
-        scores.append(abs(testY-yhat))
-        hist.append(test[i])
-    alpha = findConformalInterval(scores, delta)
-    error = np.sqrt(mean_squared_error(test[:,-n_out:], predictions))
-    return [error, alpha]#, test[:, -n_out], predictions
-
-def randomForestForecast(train, testX, n_out = 1, n_estimators = 1000):
-    train = np.asarray(train)
+def TrainTestSplit(data, test_split = 0, n_out=1):
+    if not test_split:
+        train = data[:, :]
+        trainX, trainY = train[:, :-n_out], train[:, -n_out:]
+        return trainX, trainY
+    n_test = int(len(data) * test_split)
+    train, test = data[:-n_test, :], data[-n_test:, :]
     trainX, trainY = train[:, :-n_out], train[:, -n_out:]
-    model = RandomForestRegressor(n_estimators)
-    if n_out == 1:
-        trainY = np.ravel(trainY)
-    model.fit(trainX, trainY)
-    yhat = model.predict([testX])
-    return yhat[0]
+    testX, testY = test[:, :-n_out], test[:, -n_out:]
+    return trainX, trainY, testX, testY
 
-def gridSearch(data, n_test, n_estimators_range, step, n_in_range, n_out = 1):
+def TrainValidateModel(model, data, n_in, n_out=1, test_split=0):
+    supervised_data = SeriesToSupervised(data, n_in, n_out=n_out)
+    if not test_split:
+        trainX, trainY = TrainTestSplit(supervised_data, test_split=test_split, n_out=n_out)
+        scaler = StandardScaler()
+        trainX = scaler.fit_transform(trainX)
+        if n_out == 1:
+            trainY = np.ravel(trainY)
+        model.fit(trainX, trainY)
+        return
+    pred = []
+    trainX, trainY, testX, testY = TrainTestSplit(supervised_data, test_split=test_split, n_out=n_out)
+    scaler = StandardScaler()
+    trainX_scaled = scaler.fit_transform(trainX)
+    if n_out==1:
+        model.fit(trainX_scaled, np.ravel(trainY))
+    else:
+        model.fit(trainX_scaled, trainY)
+    for i in range(testX.shape[0]):
+        trainX = np.append(trainX, np.array([testX[i]]), axis=0)
+        trainY = np.append(trainY, np.array([testY[i]]), axis=0)
+        trainX_scaled = scaler.fit_transform(trainX)
+        yhat = model.predict(np.array([trainX_scaled[-1]]))[0]
+        pred.append(yhat)
+        if n_out == 1:
+            model.fit(trainX_scaled, np.ravel(trainY))
+        else:
+            model.fit(trainX_scaled, trainY)
+    pred = np.asarray(pred)
+    scores = abs(testY - pred)
+    val_error = np.sqrt(mean_squared_error(testY, pred))
+    return val_error
+
+def gridSearch(data, test_split, n_estimators_range, n_in_range, n_out = 1, step = 100):
     best_error = 0
     for n_estimator in range(n_estimators_range[0], n_estimators_range[1]+1, step):
-        print(f'training forest with {n_estimator} estimators')
+        print(f'Training forest with {n_estimator} estimators')
         for n_in in range(n_in_range[0], n_in_range[1]+1):
-            hist = seriesToSupervised(data = data['Close Price'], n_in = n_in, n_out = n_out)
-            for key in lag_indicators.keys():
-                indicator_array = np.reshape(np.asarray(data[f'{lag_indicators[key]}-bar {key}'])[n_in-1:-1], (len(data.index)-n_in, 1))
-                np.concatenate((indicator_array, hist), axis=1)
-            if n_in < max_lag_period:
-                hist = hist[max_lag_period-n_in:]
-            error, alpha = forwardValidation(data = hist, n_test = n_test, n_out = n_out, n_estimators = n_estimator)
+            model = RandomForestRegressor(n_estimator)
+            error = TrainValidateModel(model, data, n_in, n_out=n_out, test_split=test_split)
+            print(f'>>> Validation error with {n_in} steps: {error}')
             if not best_error:
                 best_error = error
                 best_in = n_in
                 best_est = n_estimator
-                best_alpha = alpha
             else:
                 if error < best_error:
                     best_error = error
                     best_in = n_in
                     best_est = n_estimator
-                    best_alpha = alpha
-    best_params = (best_est, best_in, best_error, best_alpha)
+    best_params = (best_est, best_in, best_error)
     return best_params
 
 def findConformalInterval(scores, delta):
@@ -90,7 +157,7 @@ def findConformalInterval(scores, delta):
             alpha_candidates.append(score1)
     return min(np.ravel(alpha_candidates))
 
-def movingAverage(data, n_periods, exponential = False):
+def MovingAverage(data, n_periods, exponential = False):
     data = np.asarray(data)
     ma = [np.NaN]*(n_periods - 1)
     if exponential:
@@ -148,90 +215,49 @@ def rateOfError(data, pred, alpha):
 n_out = 1
 ma_period = 5
 rsi_period = 5
-lag_indicators = {'Moving Average': ma_period, 'RSI': rsi_period}
-max_lag_period = max(lag_indicators.values())
+lag_indicators = {'Moving Average': [ma_period, MovingAverage], 'RSI': [rsi_period, RSI]}
+max_lag_period = max([x[0] for x in lag_indicators.values()])
+n_features = len(lag_indicators)+2
 
 symbol = 'AAPL'
 start_date = '2022-02-01'
-end_date = '2022-02-02'
-history = yf.Ticker(symbol).history(start = start_date, end = end_date, interval='5m')
-history = history[['Close']]
-history.rename(columns = {'Close': 'Close Price'}, inplace = True)
-history['Time'] = pd.to_datetime(history.index).time
-for i in history.index:
-    history.loc[i, 'Time'] = str(history.loc[i, 'Time'])
-history.set_index('Time', inplace=True)
-history[f'{ma_period}-bar Moving Average'] = movingAverage(data = history['Close Price'], n_periods = ma_period, exponential=True)
-history[f'{rsi_period}-bar RSI'] = RSI(data = history['Close Price'], n_periods = rsi_period)
-fig, ax = plt.subplots(figsize = (18, 8))
-sns.lineplot(data = [history['Close Price'], history[f'{ma_period}-bar Moving Average']], palette = ['darkblue', 'darkorange'])
-plt.title(f'{symbol} One Day Time Series for {start_date} (5 minutes intervals)')
-plt.xlabel('Time')
-plt.ylabel('Price ($)')
-plt.xticks(rotation=90)
-plt.show()
+end_date = '2022-02-04'
+history_data = HistoryDataSet(symbol, start_date, end_date, indicators=lag_indicators)
+PlotHistoryDataSet(history_data, columns=[0,2])
 
-n_test = int(len(history.index)*0.3)
-
-best_parameters = gridSearch(data = history, n_test = n_test, n_estimators_range = (100, 1500), step = 100, n_in_range = (1,10), n_out = n_out)
+test_split = 0.3
+best_parameters = gridSearch(history_data, test_split, (100, 100), (1,5), n_out=n_out)
 n_estimators = best_parameters[0]
 n_in = best_parameters[1]
-alpha = best_parameters[3] 
-
+error = best_parameters[2]
+print(f'Best parameters: {n_estimators} trees and {n_in} steps, best error: {error}')
 best_model = RandomForestRegressor(n_estimators)
-train = seriesToSupervised(data = history['Close Price'], n_in = n_in, n_out = n_out)
-for key in lag_indicators.keys():
-    indicator_array = np.reshape(np.asarray(history[f'{lag_indicators[key]}-bar {key}'])[n_in-1:-1], (len(history.index)-n_in, 1))
-    train = np.concatenate((indicator_array, train), axis=1)
-if n_in < max_lag_period:
-    train = train[max_lag_period-n_in:]
-trainX, trainY = train[:,:-n_out], train[:,-n_out:]
-best_model.fit(trainX, np.ravel(trainY))
 
-start_date = '2022-02-02'
-end_date = '2022-02-03'
-history = yf.Ticker(symbol).history(start = start_date, end = end_date, interval='5m')
-history = history[['Close']]
-history.rename(columns = {'Close': 'Close Price'}, inplace = True)
-history['Time'] = pd.to_datetime(history.index).time
-for i in history.index:
-    history.loc[i, 'Time'] = str(history.loc[i, 'Time'])
-history.set_index('Time', inplace=True)
-history[f'{ma_period}-bar Moving Average'] = movingAverage(data = history['Close Price'], n_periods = ma_period, exponential = True)
-history[f'{rsi_period}-bar RSI'] = RSI(data = history['Close Price'], n_periods = rsi_period)
-history['Prediction upper limit'] = np.NaN
-history['Prediction'] = np.NaN
-history['Prediction lower limit'] = np.NaN
-start = max(max_lag_period, n_in)
-for i in range(start, len(history.index)-1):
-    data = seriesToSupervised(history['Close Price'][start-n_in:i+1], n_in = n_in, n_out = n_out)
-    for key in lag_indicators.keys():
-        indicator_array = np.reshape(np.asarray(history[f'{lag_indicators[key]}-bar {key}'])[start-1:i], (len(data), 1))
-        data = np.concatenate((indicator_array, data), axis=1)
-    trainX, trainY = data[:, :-n_out], data[:, -n_out:]
-    best_model.fit(trainX, np.ravel(trainY))
-    prediction_vector = [history.iloc[i, x] for x in range(len(lag_indicators),0,-1)]
-    for j in range(n_in - 1, -1, -1):
-        prediction_vector.append(history.iloc[i-j,0])
-    yhat = best_model.predict([prediction_vector])
-    for j in range(-1,2):
-        history.iloc[i+1, len(lag_indicators)+2-j] = yhat[0] + j*alpha
-    
-fig, ax = plt.subplots(figsize = (18, 8))
-ax = sns.lineplot(data = [history['Close Price'], history['Prediction']], palette = ['darkblue', 'firebrick'])
-ax = sns.lineplot(data = history['Prediction upper limit'], legend = False, color = 'black', alpha = 0.2)
-ax = sns.lineplot(data = history['Prediction lower limit'], legend = False, color = 'black', alpha = 0.2)
-l_plus = ax.lines[4]
-l_minus = ax.lines[5]
-x = l_minus.get_xdata()
-y_plus = l_plus.get_ydata()
-y_minus = l_minus.get_ydata()
-ax.fill_between(x, y_minus, y_plus, color = "turquoise", alpha=0.2)
-plt.title(f'{symbol} One Day Time Series for {start_date} (5 minutes intervals)')
-plt.xlabel('Time')
-plt.ylabel('Price ($)')
-plt.xticks(rotation=90)
-plt.show()
+start_date = '2022-02-01'
+end_date = '2022-02-05'
+start_pred = 235
+history_data = HistoryDataSet(symbol, start_date, end_date, indicators=lag_indicators)
+history_for_train, history_for_test = history_data[:start_pred-1], history_data[start_pred-n_in:]
+TrainValidateModel(best_model, history_for_train, n_in, n_out=n_out)
+history_for_trainX = TrainTestSplit(SeriesToSupervised(history_for_train, n_in, n_out=1))[0]
+history_for_trainY = TrainTestSplit(SeriesToSupervised(history_for_train, n_in, n_out=1))[1]
+history_for_testX = TrainTestSplit(SeriesToSupervised(history_for_test, n_in, n_out=1))[0]
+history_for_testY = TrainTestSplit(SeriesToSupervised(history_for_test, n_in, n_out=1))[1]
+scaler = StandardScaler()
+history_data['Prediction'] = np.NaN
+for i in range(history_for_testX.shape[0]):
+    history_for_trainX = np.append(history_for_trainX, np.array([history_for_testX[i]]), axis=0)
+    history_for_trainY = np.append(history_for_trainY, np.array([history_for_testY[i]]), axis=0)
+    trainX = scaler.fit_transform(history_for_trainX)
+    yhat = best_model.predict(np.array([trainX[-1]]))[0]
+    history_data.iloc[start_pred+i, n_features] = yhat
+    if n_out == 1:
+        best_model.fit(trainX, np.ravel(history_for_trainY))
+    else:
+        best_model.fit(trainX, history_for_trainY)
 
-error_rate = rateOfError(history['Close Price'], history['Prediction'], alpha = alpha)      
-print(error_rate)
+PlotHistoryDataSet(history_data, columns=[0, n_features], palette=['darkblue', 'firebrick'])
+print(history_data[start_pred-1:])
+rmse = np.sqrt(mean_squared_error(history_data.iloc[start_pred:, 0], history_data.iloc[start_pred:, n_features]))
+mean_price = mean(history_data.iloc[start_pred:,0])
+print(f'The normalized root mean squared error of the prediction is: {rmse/mean_price}')
