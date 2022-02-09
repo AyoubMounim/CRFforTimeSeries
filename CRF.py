@@ -102,7 +102,6 @@ def TrainValidateModel(model, data, n_in, test_split=0, n_out=1, delta=0):
             trainY = np.ravel(trainY)
         model.fit(trainX, trainY)
         return
-    pred = []
     trainX, trainY, testX, testY = TrainTestSplit(supervised_data, test_split=test_split, n_out=n_out)
     scaler = StandardScaler()
     trainX_scaled = scaler.fit_transform(trainX)
@@ -129,7 +128,7 @@ def TrainValidateModel(model, data, n_in, test_split=0, n_out=1, delta=0):
         return val_error, alpha
     return val_error
 
-def gridSearch(data, test_split, n_estimators_range, n_in_range, delta, n_out = 1, step = 100):
+def GridSearch(data, test_split, n_estimators_range, n_in_range, delta, n_out = 1, step = 100):
     best_error = 0
     for n_estimator in range(n_estimators_range[0], n_estimators_range[1]+1, step):
         print(f'Training forest with {n_estimator} estimators')
@@ -152,6 +151,8 @@ def gridSearch(data, test_split, n_estimators_range, n_in_range, delta, n_out = 
     return best_params, best_error, best_alpha
 
 def FindConformalInterval(scores, delta):
+    if delta<=0 or delta>1:
+        raise ValueError('Significance level must belong to the interval (0,1)')
     scores.sort()
     scores = np.asarray(scores)
     scores = scores.reshape((scores.shape[0], 1))
@@ -270,7 +271,7 @@ PlotHistoryDataSet(history_data, columns=[0,2])
 
 test_split = 0.3
 delta = 0.1
-best_parameters, error, alpha = gridSearch(history_data, test_split, (100, 100), (1,1), n_out=n_out, delta=delta)
+best_parameters, error, alpha = GridSearch(history_data, test_split, (100, 100), (1,1), n_out=n_out, delta=delta)
 n_estimators = best_parameters[0]
 n_in = best_parameters[1]
 print('')
