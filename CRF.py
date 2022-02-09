@@ -5,7 +5,7 @@ import pandas as pd
 import numpy as np
 import seaborn as sns
 import matplotlib.pyplot as plt
-from sklearn.preprocessing import StandardScaler
+from sklearn.preprocessing import StandardScaler, MinMaxScaler
 from sklearn.metrics import mean_squared_error
 from sklearn.ensemble import RandomForestRegressor
 from statistics import mean
@@ -92,7 +92,7 @@ def TrainTestSplit(data, test_split = 0, n_out=1):
     testX, testY = test[:, :-n_out], test[:, -n_out:]
     return trainX, trainY, testX, testY
 
-def TrainValidateModel(model, data, n_in, n_out=1, test_split=0):
+def TrainValidateModel(model, data, n_in, n_out=1, test_split=0, delta=0):
     supervised_data = SeriesToSupervised(data, n_in, n_out=n_out)
     if not test_split:
         trainX, trainY = TrainTestSplit(supervised_data, test_split=test_split, n_out=n_out)
@@ -110,52 +110,64 @@ def TrainValidateModel(model, data, n_in, n_out=1, test_split=0):
         model.fit(trainX_scaled, np.ravel(trainY))
     else:
         model.fit(trainX_scaled, trainY)
+    scores = []
+    mse_cumulative = 0
     for i in range(testX.shape[0]):
         trainX = np.append(trainX, np.array([testX[i]]), axis=0)
         trainY = np.append(trainY, np.array([testY[i]]), axis=0)
         trainX_scaled = scaler.fit_transform(trainX)
-        yhat = model.predict(np.array([trainX_scaled[-1]]))[0]
-        pred.append(yhat)
+        yhat = model.predict(np.array([trainX_scaled[-1]]))
+        mse_cumulative += ((trainY[-1]-yhat)**2).sum()
+        scores.append((abs(trainY[-1]-yhat).sum())/n_out)
         if n_out == 1:
             model.fit(trainX_scaled, np.ravel(trainY))
         else:
             model.fit(trainX_scaled, trainY)
-    pred = np.asarray(pred)
-    scores = abs(testY - pred)
-    val_error = np.sqrt(mean_squared_error(testY, pred))
+    val_error = np.sqrt(mse_cumulative/(n_out*testX.shape[0]))
+    if delta:
+        alpha = FindConformalInterval(scores, delta)
+        return val_error, alpha
     return val_error
 
-def gridSearch(data, test_split, n_estimators_range, n_in_range, n_out = 1, step = 100):
+def gridSearch(data, test_split, n_estimators_range, n_in_range, delta, n_out = 1, step = 100):
     best_error = 0
     for n_estimator in range(n_estimators_range[0], n_estimators_range[1]+1, step):
         print(f'Training forest with {n_estimator} estimators')
         for n_in in range(n_in_range[0], n_in_range[1]+1):
             model = RandomForestRegressor(n_estimator)
-            error = TrainValidateModel(model, data, n_in, n_out=n_out, test_split=test_split)
+            error, alpha = TrainValidateModel(model, data, n_in, n_out=n_out, test_split=test_split, delta=delta)
             print(f'>>> Validation error with {n_in} steps: {error}')
             if not best_error:
                 best_error = error
+                best_alpha = alpha
                 best_in = n_in
                 best_est = n_estimator
             else:
                 if error < best_error:
                     best_error = error
+                    best_alpha = alpha
                     best_in = n_in
                     best_est = n_estimator
-    best_params = (best_est, best_in, best_error)
+    best_params = (best_est, best_in, best_error, best_alpha)
     return best_params
 
-def findConformalInterval(scores, delta):
-    alpha_candidates = []
-    for score1 in scores:
+def FindConformalInterval(scores, delta):
+    scores.sort()
+    scores = np.asarray(scores)
+    scores = scores.reshape((scores.shape[0], 1))
+    scaler = MinMaxScaler()
+    scores = scaler.fit_transform(scores)
+    for alpha_s in np.arange(0, 1.1, 0.1):
         count = 0
-        for score2 in scores:
-            if score2 < score1:
+        for alpha in scores:
+            if alpha<alpha_s:
                 count += 1
-        test = (count + 1)/(len(scores)+1) - 1 + delta
-        if test >= 0:
-            alpha_candidates.append(score1)
-    return min(np.ravel(alpha_candidates))
+            else:
+                break
+        test = (count+1)/(scores.shape[0]+1)-1+delta
+        if test>=0:
+            return np.ravel(scaler.inverse_transform([[alpha_s]]))[0]
+    raise ValueError('Cannot find conformal interval')
 
 def MovingAverage(data, n_periods, exponential = False):
     data = np.asarray(data)
@@ -199,18 +211,13 @@ def RSI(data, n_periods):
             rsi_list.append(100*rs/(1+rs))
     return rsi_list
 
-def rateOfError(data, pred, alpha):
-    data = np.asanyarray(data)
-    pred = np.asanyarray(pred)
-    count = 0
-    countNaN = 0
-    for i in range(len(data)):
-        if np.isnan(pred[i]):
-            countNaN +=1
-        else:
-            if data[i] > pred[i] + alpha or data[i] < pred[i] - alpha:
-                count += 1
-    return count/(len(data)-countNaN)
+def RateOfError(data, pred, alpha):
+    data = np.asarray(data)
+    pred = np.asarray(pred)
+    if len(data.shape)!=1 or len(pred.shape)!=1:
+        raise ValueError('Array must be one dimensional')
+    error_count = ((data<(pred-alpha))+(data>(pred+alpha))).sum()
+    return error_count*100/data.shape[0]
     
 n_out = 1
 ma_period = 5
@@ -226,16 +233,20 @@ history_data = HistoryDataSet(symbol, start_date, end_date, indicators=lag_indic
 PlotHistoryDataSet(history_data, columns=[0,2])
 
 test_split = 0.3
-best_parameters = gridSearch(history_data, test_split, (100, 100), (1,5), n_out=n_out)
+delta = 0.05
+best_parameters = gridSearch(history_data, test_split, (100, 100), (1,1), n_out=n_out, delta=delta)
 n_estimators = best_parameters[0]
 n_in = best_parameters[1]
 error = best_parameters[2]
+alpha = best_parameters[3]
+print('')
 print(f'Best parameters: {n_estimators} trees and {n_in} steps, best error: {error}')
 best_model = RandomForestRegressor(n_estimators)
 
 start_date = '2022-02-01'
 end_date = '2022-02-05'
-start_pred = 235
+start_pred = 78*3+1 #there are 78 observations in a one day time series
+graph_lag = 12
 history_data = HistoryDataSet(symbol, start_date, end_date, indicators=lag_indicators)
 history_for_train, history_for_test = history_data[:start_pred-1], history_data[start_pred-n_in:]
 TrainValidateModel(best_model, history_for_train, n_in, n_out=n_out)
@@ -244,20 +255,26 @@ history_for_trainY = TrainTestSplit(SeriesToSupervised(history_for_train, n_in, 
 history_for_testX = TrainTestSplit(SeriesToSupervised(history_for_test, n_in, n_out=1))[0]
 history_for_testY = TrainTestSplit(SeriesToSupervised(history_for_test, n_in, n_out=1))[1]
 scaler = StandardScaler()
+history_data['Prediction lower limit'] = np.NaN
 history_data['Prediction'] = np.NaN
+history_data['Prediction upper limit'] = np.NaN
 for i in range(history_for_testX.shape[0]):
     history_for_trainX = np.append(history_for_trainX, np.array([history_for_testX[i]]), axis=0)
     history_for_trainY = np.append(history_for_trainY, np.array([history_for_testY[i]]), axis=0)
     trainX = scaler.fit_transform(history_for_trainX)
     yhat = best_model.predict(np.array([trainX[-1]]))[0]
-    history_data.iloc[start_pred+i, n_features] = yhat
+    if i >= graph_lag:
+        for j in range(-1,2):
+            history_data.iloc[start_pred+i, n_features+1+j] = yhat+j*alpha
     if n_out == 1:
         best_model.fit(trainX, np.ravel(history_for_trainY))
     else:
         best_model.fit(trainX, history_for_trainY)
 
-PlotHistoryDataSet(history_data, columns=[0, n_features], palette=['darkblue', 'firebrick'])
-print(history_data[start_pred-1:])
-rmse = np.sqrt(mean_squared_error(history_data.iloc[start_pred:, 0], history_data.iloc[start_pred:, n_features]))
-mean_price = mean(history_data.iloc[start_pred:,0])
-print(f'The normalized root mean squared error of the prediction is: {rmse/mean_price}')
+PlotHistoryDataSet(history_data, columns=[0, n_features, n_features+1, n_features+2])
+rmse = np.sqrt(mean_squared_error(history_data.iloc[start_pred+graph_lag:, 0], history_data.iloc[start_pred+graph_lag:, n_features+1]))
+mean_price = mean(history_data.iloc[start_pred+graph_lag:,0])
+error_rate = RateOfError(history_data.iloc[start_pred+graph_lag:, 0], history_data.iloc[start_pred+graph_lag:, n_features+1], alpha)
+print('')
+print(f'The normalized root mean squared error of the prediction is: {rmse/mean_price}\n'
+      f'The error rate is: {error_rate}')
