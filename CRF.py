@@ -311,6 +311,6 @@ error_rate = RateOfError(history_data.iloc[start_pred:, 0], history_data.iloc[st
 print('')
 print(f'The normalized root mean squared error of the prediction is: {rmse/mean_price}\n'
       f'The error rate is: {error_rate}')
-exit()
+
 #This portion computes the calibration curve
 calib = CalibrationCurve(best_parameters, history_data)
