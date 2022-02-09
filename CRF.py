@@ -16,16 +16,10 @@ def HistoryDataSet(symbol, start_date, end_date, interval='5m', indicators = {})
     history = yf.Ticker(symbol).history(start=start_date, end=end_date, interval=interval)
     history = history[['Close', 'Volume']]
     history.rename(columns={'Close': 'Close Price'}, inplace=True)
-    '''
-    history['Time'] = pd.to_datetime(history.index).time
-    for i in history.index:
-        history.loc[i, 'Time'] = str(history.loc[i, 'Time'])
-    history.set_index('Time', inplace=True)
-    '''
     history.reset_index(drop=True, inplace=True)
     if indicators:
         for key in indicators.keys():
-            history[f'{indicators[key][0]}-bar {key}'] = indicators[key][1](data=history['Close Price'], n_periods=indicators[key][0])
+            history[f'{indicators[key][0]}-bar {key}'] = indicators[key][1](history['Close Price'], indicators[key][0])
     return history
 
 def PlotHistoryDataSet(data, columns = [], palette = []):
@@ -233,8 +227,8 @@ def CalibrationCurve(model_parameters, data, calibration_split=0.3):
         print(f'Processing delta: {delta}')
         ensemble_error = []
         ensemble_alpha = []
-        for i in range(11):
-            print(f'>>> experiment number: {i}')
+        for i in range(10):
+            print(f'>>> experiment number: {i+1}')
             error, alpha = TrainValidateModel(model, data_calibration, n_in, test_split=test_split, delta=delta)
             data_calibrationX, data_calibrationY = TrainTestSplit(SeriesToSupervised(data_calibration, n_in))
             data_calibrationY = np.ravel(data_calibrationY)
@@ -242,6 +236,7 @@ def CalibrationCurve(model_parameters, data, calibration_split=0.3):
             data_testY = np.ravel(data_testY)
             scaler = StandardScaler()
             pred = []
+            mean_price = mean(np.ravel(data_calibrationY[-int(data_calibrationY.shape[0]*0.3):]))
             for i in range(data_testX.shape[0]):
                 data_calibrationX = np.append(data_calibrationX, np.array([data_testX[i]]), axis=0)
                 data_calibrationY = np.append(data_calibrationY, np.array([data_testY[i]]), axis=0)
@@ -252,10 +247,19 @@ def CalibrationCurve(model_parameters, data, calibration_split=0.3):
             error_rate = RateOfError(np.ravel(data_testY), pred, alpha)
             ensemble_error.append(error_rate)
             ensemble_alpha.append(alpha)
-        df = df.append(pd.Series([delta, mean(ensemble_alpha), mean(ensemble_error)], index=columns), ignore_index=True)
+        df = df.append(pd.Series([
+            delta,
+            mean(ensemble_alpha)/mean_price,
+            mean(ensemble_error)
+            ],
+            index=columns), ignore_index=True)
     return df
 
-    
+
+#-----------------------------------------------------------------------------------------------------------------------
+#In this portion of the code the information of the stock time series are retrived and a grid search is conducted
+#to find the best hyperparameters. During the grid search the conformal interval is also determined.
+
 n_out = 1
 ma_period = 5
 rsi_period = 5
@@ -271,14 +275,15 @@ PlotHistoryDataSet(history_data, columns=[0,2])
 
 test_split = 0.3
 delta = 0.1
-best_parameters, error, alpha = GridSearch(history_data, test_split, (100, 100), (1,1), n_out=n_out, delta=delta)
+best_parameters, error, alpha = GridSearch(history_data, test_split, (100, 1000), (1, 10), n_out=n_out, delta=delta)
 n_estimators = best_parameters[0]
 n_in = best_parameters[1]
-print('')
 print(f'Best parameters: {n_estimators} trees and {n_in} steps, best error: {error}')
 best_model = RandomForestRegressor(n_estimators)
 
-#This portion trains the best model on 2 days and predicts the 3th one
+#-----------------------------------------------------------------------------------------------------------------------
+#This portion of code trains the best model found by the grid search on 2 days and predicts the 3th one.
+
 start_date = '2022-02-02'
 end_date = '2022-02-05'
 start_pred = 78*2+1 #there are 78 observations in a one day time series
@@ -305,7 +310,8 @@ for i in range(history_for_testX.shape[0]):
     else:
         best_model.fit(trainX, history_for_trainY)
 
-PlotHistoryDataSet(history_data, columns=[0, n_features, n_features+1, n_features+2], palette=['darkblue', 'black', 'firebrick', 'black'])
+PlotHistoryDataSet(history_data, columns=[0, n_features, n_features+1, n_features+2],
+                   palette=['darkblue', 'black', 'firebrick', 'black'])
 rmse = np.sqrt(mean_squared_error(history_data.iloc[start_pred:, 0], history_data.iloc[start_pred:, n_features+1]))
 mean_price = mean(history_data.iloc[start_pred:,0])
 error_rate = RateOfError(history_data.iloc[start_pred:, 0], history_data.iloc[start_pred:, n_features+1], alpha)
@@ -313,5 +319,20 @@ print('')
 print(f'The normalized root mean squared error of the prediction is: {rmse/mean_price}\n'
       f'The error rate is: {error_rate}')
 
-#This portion computes the calibration curve
+#-----------------------------------------------------------------------------------------------------------------------
+#This portion of the code computes and plots the calibration curve.
+
 calib = CalibrationCurve(best_parameters, history_data)
+fig, ax = plt.subplots(figsize = (12,5))
+ax2 = ax.twinx()
+ax.set_title('Calibration Curve')
+ax.set_ylabel('Average Normalized Interval Width')
+ax2.set_ylabel('Average Error Rate')
+ax.set_xlabel('Significance Level')
+ax.plot(calib['delta'], calib['Average interval with'], color='darkblue', marker='o')
+ax2.plot(calib['delta'], calib['Average rate of error'], color='firebrick', marker='o')
+ax.legend(['Interval width'], loc='upper center')
+ax2.legend(['Error rate'], loc='upper right')
+ax.yaxis.grid(color='lightgray', linestyle='dashed')
+plt.tight_layout()
+plt.show()
