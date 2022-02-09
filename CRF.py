@@ -218,7 +218,7 @@ def RateOfError(data, pred, alpha):
     if len(data.shape)!=1 or len(pred.shape)!=1 or len(data.shape)!=len(pred.shape):
         raise ValueError('Array must be one dimensional')
     error_count = ((data<(pred-alpha))+(data>(pred+alpha))).sum()
-    return error_count*100/data.shape[0]
+    return error_count/data.shape[0]
 
 def CalibrationCurve(model_parameters, data, calibration_split=0.3):
     columns = ['delta', 'Average interval with', 'Average rate of error']
