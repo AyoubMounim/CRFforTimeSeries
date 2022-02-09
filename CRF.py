@@ -269,7 +269,7 @@ history_data = HistoryDataSet(symbol, start_date, end_date, indicators=lag_indic
 PlotHistoryDataSet(history_data, columns=[0,2])
 
 test_split = 0.3
-delta = 0.05
+delta = 0.1
 best_parameters, error, alpha = gridSearch(history_data, test_split, (100, 100), (1,1), n_out=n_out, delta=delta)
 n_estimators = best_parameters[0]
 n_in = best_parameters[1]
@@ -277,14 +277,10 @@ print('')
 print(f'Best parameters: {n_estimators} trees and {n_in} steps, best error: {error}')
 best_model = RandomForestRegressor(n_estimators)
 
-calib = CalibrationCurve(best_parameters, history_data)
-print(calib)
-exit()
-
-start_date = '2022-02-01'
+#This portion trains the best model on 2 days and predicts the 3th one
+start_date = '2022-02-02'
 end_date = '2022-02-05'
-start_pred = 78*3+1 #there are 78 observations in a one day time series
-graph_lag = 12
+start_pred = 78*2+1 #there are 78 observations in a one day time series
 history_data = HistoryDataSet(symbol, start_date, end_date, indicators=lag_indicators)
 history_for_train, history_for_test = history_data[:start_pred-1], history_data[start_pred-n_in:]
 TrainValidateModel(best_model, history_for_train, n_in, n_out=n_out)
@@ -301,18 +297,20 @@ for i in range(history_for_testX.shape[0]):
     history_for_trainY = np.append(history_for_trainY, np.array([history_for_testY[i]]), axis=0)
     trainX = scaler.fit_transform(history_for_trainX)
     yhat = best_model.predict(np.array([trainX[-1]]))[0]
-    if i >= graph_lag:
-        for j in range(-1,2):
-            history_data.iloc[start_pred+i, n_features+1+j] = yhat+j*alpha
+    for j in range(-1,2):
+        history_data.iloc[start_pred+i, n_features+1+j] = yhat+j*alpha
     if n_out == 1:
         best_model.fit(trainX, np.ravel(history_for_trainY))
     else:
         best_model.fit(trainX, history_for_trainY)
 
-PlotHistoryDataSet(history_data, columns=[0, n_features, n_features+1, n_features+2])
-rmse = np.sqrt(mean_squared_error(history_data.iloc[start_pred+graph_lag:, 0], history_data.iloc[start_pred+graph_lag:, n_features+1]))
-mean_price = mean(history_data.iloc[start_pred+graph_lag:,0])
-error_rate = RateOfError(history_data.iloc[start_pred+graph_lag:, 0], history_data.iloc[start_pred+graph_lag:, n_features+1], alpha)
+PlotHistoryDataSet(history_data, columns=[0, n_features, n_features+1, n_features+2], palette=['darkblue', 'black', 'firebrick', 'black'])
+rmse = np.sqrt(mean_squared_error(history_data.iloc[start_pred:, 0], history_data.iloc[start_pred:, n_features+1]))
+mean_price = mean(history_data.iloc[start_pred:,0])
+error_rate = RateOfError(history_data.iloc[start_pred:, 0], history_data.iloc[start_pred:, n_features+1], alpha)
 print('')
 print(f'The normalized root mean squared error of the prediction is: {rmse/mean_price}\n'
       f'The error rate is: {error_rate}')
+exit()
+#This portion computes the calibration curve
+calib = CalibrationCurve(best_parameters, history_data)
