@@ -92,7 +92,7 @@ def TrainTestSplit(data, test_split = 0, n_out=1):
     testX, testY = test[:, :-n_out], test[:, -n_out:]
     return trainX, trainY, testX, testY
 
-def TrainValidateModel(model, data, n_in, n_out=1, test_split=0, delta=0):
+def TrainValidateModel(model, data, n_in, test_split=0, n_out=1, delta=0):
     supervised_data = SeriesToSupervised(data, n_in, n_out=n_out)
     if not test_split:
         trainX, trainY = TrainTestSplit(supervised_data, test_split=test_split, n_out=n_out)
@@ -148,8 +148,8 @@ def gridSearch(data, test_split, n_estimators_range, n_in_range, delta, n_out = 
                     best_alpha = alpha
                     best_in = n_in
                     best_est = n_estimator
-    best_params = (best_est, best_in, best_error, best_alpha)
-    return best_params
+    best_params = (best_est, best_in)
+    return best_params, best_error, best_alpha
 
 def FindConformalInterval(scores, delta):
     scores.sort()
@@ -214,10 +214,46 @@ def RSI(data, n_periods):
 def RateOfError(data, pred, alpha):
     data = np.asarray(data)
     pred = np.asarray(pred)
-    if len(data.shape)!=1 or len(pred.shape)!=1:
+    if len(data.shape)!=1 or len(pred.shape)!=1 or len(data.shape)!=len(pred.shape):
         raise ValueError('Array must be one dimensional')
     error_count = ((data<(pred-alpha))+(data>(pred+alpha))).sum()
     return error_count*100/data.shape[0]
+
+def CalibrationCurve(model_parameters, data, calibration_split=0.3):
+    columns = ['delta', 'Average interval with', 'Average rate of error']
+    df = pd.DataFrame(columns=columns)
+    n_trees = model_parameters[0]
+    n_in = model_parameters[1]
+    model = RandomForestRegressor(n_trees)
+    n_calibration = int(calibration_split*len(data.index))
+    data_calibration = data[:-n_calibration]
+    data_test = data[-n_calibration-n_in:]
+    for delta in np.arange(0.05, 1.1, 0.05):
+        print(f'Processing delta: {delta}')
+        ensemble_error = []
+        ensemble_alpha = []
+        for i in range(11):
+            print(f'>>> experiment number: {i}')
+            error, alpha = TrainValidateModel(model, data_calibration, n_in, test_split=test_split, delta=delta)
+            data_calibrationX, data_calibrationY = TrainTestSplit(SeriesToSupervised(data_calibration, n_in))
+            data_calibrationY = np.ravel(data_calibrationY)
+            data_testX, data_testY = TrainTestSplit(SeriesToSupervised(data_test, n_in))
+            data_testY = np.ravel(data_testY)
+            scaler = StandardScaler()
+            pred = []
+            for i in range(data_testX.shape[0]):
+                data_calibrationX = np.append(data_calibrationX, np.array([data_testX[i]]), axis=0)
+                data_calibrationY = np.append(data_calibrationY, np.array([data_testY[i]]), axis=0)
+                data_calibrationX_scaled = scaler.fit_transform(data_calibrationX)
+                yhat = model.predict(np.array([data_calibrationX_scaled[-1]]))[0]
+                pred.append(yhat)
+                model.fit(data_calibrationX_scaled, data_calibrationY)
+            error_rate = RateOfError(np.ravel(data_testY), pred, alpha)
+            ensemble_error.append(error_rate)
+            ensemble_alpha.append(alpha)
+        df = df.append(pd.Series([delta, mean(ensemble_alpha), mean(ensemble_error)], index=columns), ignore_index=True)
+    return df
+
     
 n_out = 1
 ma_period = 5
@@ -234,14 +270,16 @@ PlotHistoryDataSet(history_data, columns=[0,2])
 
 test_split = 0.3
 delta = 0.05
-best_parameters = gridSearch(history_data, test_split, (100, 100), (1,1), n_out=n_out, delta=delta)
+best_parameters, error, alpha = gridSearch(history_data, test_split, (100, 100), (1,1), n_out=n_out, delta=delta)
 n_estimators = best_parameters[0]
 n_in = best_parameters[1]
-error = best_parameters[2]
-alpha = best_parameters[3]
 print('')
 print(f'Best parameters: {n_estimators} trees and {n_in} steps, best error: {error}')
 best_model = RandomForestRegressor(n_estimators)
+
+calib = CalibrationCurve(best_parameters, history_data)
+print(calib)
+exit()
 
 start_date = '2022-02-01'
 end_date = '2022-02-05'
