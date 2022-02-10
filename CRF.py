@@ -275,7 +275,7 @@ PlotHistoryDataSet(history_data, columns=[0,2])
 
 test_split = 0.3
 delta = 0.1
-best_parameters, error, alpha = GridSearch(history_data, test_split, (100, 1000), (1, 10), n_out=n_out, delta=delta)
+best_parameters, error, alpha = GridSearch(history_data, test_split, (100, 100), (6, 6), n_out=n_out, delta=delta)
 n_estimators = best_parameters[0]
 n_in = best_parameters[1]
 print(f'Best parameters: {n_estimators} trees and {n_in} steps, best error: {error}')
@@ -322,6 +322,7 @@ print(f'The normalized root mean squared error of the prediction is: {rmse/mean_
 #-----------------------------------------------------------------------------------------------------------------------
 #This portion of the code computes and plots the calibration curve.
 
+history_data = HistoryDataSet(symbol, start_date, end_date, indicators=lag_indicators)
 calib = CalibrationCurve(best_parameters, history_data)
 fig, ax = plt.subplots(figsize = (12,5))
 ax2 = ax.twinx()
