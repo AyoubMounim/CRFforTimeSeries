@@ -11,6 +11,7 @@ from sklearn.ensemble import RandomForestRegressor
 from statistics import mean
 
 sns.set_theme()
+sns.color_palette('pastel')
 
 def HistoryDataSet(symbol, start_date, end_date, interval='5m', indicators = {}):
     history = yf.Ticker(symbol).history(start=start_date, end=end_date, interval=interval)
@@ -22,7 +23,7 @@ def HistoryDataSet(symbol, start_date, end_date, interval='5m', indicators = {})
             history[f'{indicators[key][0]}-bar {key}'] = indicators[key][1](history['Close Price'], indicators[key][0])
     return history
 
-def PlotHistoryDataSet(data, columns = [], palette = []):
+def PlotHistoryDataSet(data, columns=(), palette=()):
     fig, ax = plt.subplots(figsize=(18, 8))
     if columns:
         data_list = []
@@ -62,7 +63,7 @@ def PlotHistoryDataSet(data, columns = [], palette = []):
     plt.show()
     return
 
-def SeriesToSupervised(data, n_in = 1, n_out = 1, dropNaN = True):
+def SeriesToSupervised(data, n_in=1, n_out=1, dropNaN=True):
     df = pd.DataFrame(data)
     col = []
     for i in range(n_in, 0, -1):
@@ -75,7 +76,7 @@ def SeriesToSupervised(data, n_in = 1, n_out = 1, dropNaN = True):
     agg.reset_index(drop=True, inplace=True)
     return agg.values
 
-def TrainTestSplit(data, test_split = 0, n_out=1):
+def TrainTestSplit(data, test_split=0, n_out=1):
     if not test_split:
         train = data[:, :]
         trainX, trainY = train[:, :-n_out], train[:, -n_out:]
@@ -122,7 +123,7 @@ def TrainValidateModel(model, data, n_in, test_split=0, n_out=1, delta=0):
         return val_error, alpha
     return val_error
 
-def GridSearch(data, test_split, n_estimators_range, n_in_range, delta, n_out = 1, step = 100):
+def GridSearch(data, test_split, n_estimators_range, n_in_range, delta, n_out=1, step=100):
     best_error = 0
     for n_estimator in range(n_estimators_range[0], n_estimators_range[1]+1, step):
         print(f'Training forest with {n_estimator} estimators')
@@ -164,7 +165,7 @@ def FindConformalInterval(scores, delta):
             return np.ravel(scaler.inverse_transform([[alpha_s]]))[0]
     raise ValueError('Cannot find conformal interval')
 
-def MovingAverage(data, n_periods, exponential = False):
+def MovingAverage(data, n_periods, exponential=True):
     data = np.asarray(data)
     ma = [np.NaN]*(n_periods - 1)
     if exponential:
@@ -223,7 +224,7 @@ def CalibrationCurve(model_parameters, data, calibration_split=0.3):
     n_calibration = int(calibration_split*len(data.index))
     data_calibration = data[:-n_calibration]
     data_test = data[-n_calibration-n_in:]
-    for delta in np.arange(0.05, 1.1, 0.05):
+    for delta in np.arange(0.05, 1.05, 0.05):
         print(f'Processing delta: {delta}')
         ensemble_error = []
         ensemble_alpha = []
@@ -268,14 +269,14 @@ max_lag_period = max([x[0] for x in lag_indicators.values()])
 n_features = len(lag_indicators)+2
 
 symbol = 'AAPL'
-start_date = '2022-02-01'
-end_date = '2022-02-04'
+start_date = '2022-02-07'
+end_date = '2022-02-09'
 history_data = HistoryDataSet(symbol, start_date, end_date, indicators=lag_indicators)
-PlotHistoryDataSet(history_data, columns=[0,2])
+PlotHistoryDataSet(history_data, columns=(0,2), palette=('blue', 'darkorange'))
 
 test_split = 0.3
 delta = 0.1
-best_parameters, error, alpha = GridSearch(history_data, test_split, (100, 100), (6, 6), n_out=n_out, delta=delta)
+best_parameters, error, alpha = GridSearch(history_data, test_split, (100, 1000), (1, 10), n_out=n_out, delta=delta)
 n_estimators = best_parameters[0]
 n_in = best_parameters[1]
 print(f'Best parameters: {n_estimators} trees and {n_in} steps, best error: {error}')
@@ -284,8 +285,8 @@ best_model = RandomForestRegressor(n_estimators)
 #-----------------------------------------------------------------------------------------------------------------------
 #This portion of code trains the best model found by the grid search on 2 days and predicts the 3th one.
 
-start_date = '2022-02-02'
-end_date = '2022-02-05'
+start_date = '2022-02-07'
+end_date = '2022-02-10'
 start_pred = 78*2+1 #there are 78 observations in a one day time series
 history_data = HistoryDataSet(symbol, start_date, end_date, indicators=lag_indicators)
 history_for_train, history_for_test = history_data[:start_pred-1], history_data[start_pred-n_in:]
@@ -310,8 +311,8 @@ for i in range(history_for_testX.shape[0]):
     else:
         best_model.fit(trainX, history_for_trainY)
 
-PlotHistoryDataSet(history_data, columns=[0, n_features, n_features+1, n_features+2],
-                   palette=['darkblue', 'black', 'firebrick', 'black'])
+PlotHistoryDataSet(history_data, columns=(0, n_features, n_features+1, n_features+2),
+                   palette=('blue', 'black', 'firebrick', 'black'))
 rmse = np.sqrt(mean_squared_error(history_data.iloc[start_pred:, 0], history_data.iloc[start_pred:, n_features+1]))
 mean_price = mean(history_data.iloc[start_pred:,0])
 error_rate = RateOfError(history_data.iloc[start_pred:, 0], history_data.iloc[start_pred:, n_features+1], alpha)
@@ -330,7 +331,7 @@ ax.set_title('Calibration Curve')
 ax.set_ylabel('Average Normalized Interval Width')
 ax2.set_ylabel('Average Error Rate')
 ax.set_xlabel('Significance Level')
-ax.plot(calib['delta'], calib['Average interval with'], color='darkblue', marker='o')
+ax.plot(calib['delta'], calib['Average interval with'], color='blue', marker='o')
 ax2.plot(calib['delta'], calib['Average rate of error'], color='firebrick', marker='o')
 ax.legend(['Interval width'], loc='upper center')
 ax2.legend(['Error rate'], loc='upper right')
