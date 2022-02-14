@@ -24,6 +24,9 @@ def HistoryDataSet(symbol, start_date, end_date, interval='5m', indicators = {})
     return history
 
 def PlotHistoryDataSet(data, stock, stard_date, end_date, columns=(), palette=(), fill=()):
+    # columns: index of the columns to print
+    # palette: colors to use to print the columns, in the same order
+    # fill: tuple consisting of index of the columns to use as borders, color to use to fill, and alpha value
     fig, ax = plt.subplots(figsize=(18, 8))
     title =f'{stock} Stocks Time Series from {stard_date} to {end_date} (5 minutes intervals)'
     if columns:
@@ -296,7 +299,7 @@ best_model = RandomForestRegressor(n_estimators)
 
 start_date = '2022-02-07'
 end_date = '2022-02-10'
-start_pred = 78*2+1+7 #there are 78 observations in a one day time series
+start_pred = 78*2+1 #there are 78 observations in a one day time series
 history_data = HistoryDataSet(symbol, start_date, end_date, indicators=lag_indicators)
 history_for_train, history_for_test = history_data[:start_pred-1], history_data[start_pred-n_in:]
 TrainValidateModel(best_model, history_for_train, n_in, n_out=n_out)
