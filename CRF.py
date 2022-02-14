@@ -11,7 +11,7 @@ from sklearn.ensemble import RandomForestRegressor
 from statistics import mean
 
 sns.set_theme()
-sns.color_palette('pastel')
+sns.set_palette('pastel')
 
 def HistoryDataSet(symbol, start_date, end_date, interval='5m', indicators = {}):
     history = yf.Ticker(symbol).history(start=start_date, end=end_date, interval=interval)
@@ -23,8 +23,9 @@ def HistoryDataSet(symbol, start_date, end_date, interval='5m', indicators = {})
             history[f'{indicators[key][0]}-bar {key}'] = indicators[key][1](history['Close Price'], indicators[key][0])
     return history
 
-def PlotHistoryDataSet(data, columns=(), palette=()):
+def PlotHistoryDataSet(data, stock, stard_date, end_date, columns=(), palette=(), fill=()):
     fig, ax = plt.subplots(figsize=(18, 8))
+    title =f'{stock} Stocks Time Series from {stard_date} to {end_date} (5 minutes intervals)'
     if columns:
         data_list = []
         for i in columns:
@@ -32,34 +33,42 @@ def PlotHistoryDataSet(data, columns=(), palette=()):
         if palette:
             if len(columns)==len(palette):
                 sns.lineplot(data=data_list, palette=palette)
-                plt.title(f'One Day Time Series (5 minutes intervals)')
+                if fill:
+                    plt.fill_between(data.index, data.iloc[:, fill[0]], data.iloc[:, fill[1]],
+                                     color=fill[2], alpha=fill[3])
+                plt.title(title)
                 plt.xlabel('Time')
-                plt.xticks(rotation=90)
                 plt.show()
                 return
             else:
-                raise ValueError('lenght of palette must equal lenght of columns to show')
+                raise ValueError('length of palette must equal length of columns to show')
         else:
             sns.lineplot(data=data_list)
-            plt.title(f'One Day Time Series (5 minutes intervals)')
+            if fill:
+                plt.fill_between(data.index, data.iloc[:, fill[0]], data.iloc[:, fill[1]],
+                                 color=fill[2], alpha=fill[3])
+            plt.title(title)
             plt.xlabel('Time')
-            plt.xticks(rotation=90)
             plt.show()
             return
     if palette:
         if len(data.columns)==len(palette):
             sns.lineplot(data=data, palette=palette)
-            plt.title(f'One Day Time Series (5 minutes intervals)')
+            if fill:
+                plt.fill_between(data.index, data.iloc[:, fill[0]], data.iloc[:, fill[1]],
+                                 color=fill[2], alpha=fill[3])
+            plt.title(title)
             plt.xlabel('Time')
-            plt.xticks(rotation=90)
             plt.show()
             return
         else:
-            raise ValueError('lenght of palette must equal lenght of columns to show')
+            raise ValueError('length of palette must equal length of columns to show')
     sns.lineplot(data=data)
-    plt.title(f'One Day Time Series (5 minutes intervals)')
+    if fill:
+        plt.fill_between(data.index, data.iloc[:, fill[0]], data.iloc[:, fill[1]],
+                         color=fill[2], alpha=fill[3])
+    plt.title(title)
     plt.xlabel('Time')
-    plt.xticks(rotation=90)
     plt.show()
     return
 
@@ -272,7 +281,7 @@ symbol = 'AAPL'
 start_date = '2022-02-07'
 end_date = '2022-02-09'
 history_data = HistoryDataSet(symbol, start_date, end_date, indicators=lag_indicators)
-PlotHistoryDataSet(history_data, columns=(0,2), palette=('blue', 'darkorange'))
+PlotHistoryDataSet(history_data, symbol, start_date, end_date, columns=(0,2), palette=('blue', 'darkorange'))
 
 test_split = 0.3
 delta = 0.1
@@ -287,7 +296,7 @@ best_model = RandomForestRegressor(n_estimators)
 
 start_date = '2022-02-07'
 end_date = '2022-02-10'
-start_pred = 78*2+1 #there are 78 observations in a one day time series
+start_pred = 78*2+1+7 #there are 78 observations in a one day time series
 history_data = HistoryDataSet(symbol, start_date, end_date, indicators=lag_indicators)
 history_for_train, history_for_test = history_data[:start_pred-1], history_data[start_pred-n_in:]
 TrainValidateModel(best_model, history_for_train, n_in, n_out=n_out)
@@ -311,14 +320,17 @@ for i in range(history_for_testX.shape[0]):
     else:
         best_model.fit(trainX, history_for_trainY)
 
-PlotHistoryDataSet(history_data, columns=(0, n_features, n_features+1, n_features+2),
-                   palette=('blue', 'black', 'firebrick', 'black'))
+PlotHistoryDataSet(history_data[int(len(history_data.index)/3):],  symbol, start_date, end_date,
+                   columns=(0, n_features, n_features+1, n_features+2),
+                   palette=('blue', 'steelblue', 'firebrick', 'steelblue'),
+                   fill=(n_features, n_features+2, 'steelblue', 0.2))
 rmse = np.sqrt(mean_squared_error(history_data.iloc[start_pred:, 0], history_data.iloc[start_pred:, n_features+1]))
-mean_price = mean(history_data.iloc[start_pred:,0])
+mean_price = mean(history_data.iloc[start_pred:, 0])
 error_rate = RateOfError(history_data.iloc[start_pred:, 0], history_data.iloc[start_pred:, n_features+1], alpha)
 print('')
 print(f'The normalized root mean squared error of the prediction is: {rmse/mean_price}\n'
       f'The error rate is: {error_rate}')
+
 
 #-----------------------------------------------------------------------------------------------------------------------
 #This portion of the code computes and plots the calibration curve.
@@ -331,10 +343,10 @@ ax.set_title('Calibration Curve')
 ax.set_ylabel('Average Normalized Interval Width')
 ax2.set_ylabel('Average Error Rate')
 ax.set_xlabel('Significance Level')
-ax.plot(calib['delta'], calib['Average interval with'], color='blue', marker='o')
-ax2.plot(calib['delta'], calib['Average rate of error'], color='firebrick', marker='o')
+sns.lineplot(x=calib['delta'], y=calib['Average interval with'], color='blue', marker='o', ax=ax)
+sns.lineplot(x=calib['delta'], y=calib['Average rate of error'], color='firebrick', marker='o', ax=ax2)
 ax.legend(['Interval width'], loc='upper center')
 ax2.legend(['Error rate'], loc='upper right')
-ax.yaxis.grid(color='lightgray', linestyle='dashed')
+ax2.yaxis.grid(color='lightgray', linestyle='dashed')
 plt.tight_layout()
 plt.show()
