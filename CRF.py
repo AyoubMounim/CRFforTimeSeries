@@ -237,11 +237,10 @@ def CalibrationCurve(model_parameters, data, calibration_split=0.3):
     data_calibration = data[:-n_calibration]
     data_test = data[-n_calibration-n_in:]
     for delta in np.arange(0.05, 1.05, 0.05):
-        print(f'Processing delta: {delta}')
+        print(f'Retrieving statistics for delta: {delta}')
         ensemble_error = []
         ensemble_alpha = []
         for i in range(10):
-            print(f'>>> experiment number: {i+1}')
             error, alpha = TrainValidateModel(model, data_calibration, n_in, test_split=test_split, delta=delta)
             data_calibrationX, data_calibrationY = TrainTestSplit(SeriesToSupervised(data_calibration, n_in))
             data_calibrationY = np.ravel(data_calibrationY)

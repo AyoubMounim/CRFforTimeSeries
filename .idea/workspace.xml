@@ -2,10 +2,7 @@
 <project version="4">
   <component name="ChangeListManager">
     <list default="true" id="4ee16534-bd62-4903-b733-2efda2e57620" name="Changes" comment="">
-      <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/CRF.py" beforeDir="false" afterPath="$PROJECT_DIR$/CRF.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/Plots/price_history1.png" beforeDir="false" afterPath="$PROJECT_DIR$/Plots/price_history1.png" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/Plots/price_pred.png" beforeDir="false" afterPath="$PROJECT_DIR$/Plots/price_pred.png" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -24,6 +21,7 @@
     <option name="showLibraryContents" value="true" />
   </component>
   <component name="PropertiesComponent">
+    <property name="ASKED_ADD_EXTERNAL_FILES" value="true" />
     <property name="RunOnceActivity.OpenProjectViewOnStart" value="true" />
     <property name="RunOnceActivity.ShowReadmeOnStart" value="true" />
     <property name="last_opened_file_path" value="$PROJECT_DIR$/../AlgoTrader" />
